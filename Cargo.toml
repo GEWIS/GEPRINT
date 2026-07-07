@@ -1,0 +1,21 @@
+[package]
+name = "gewisprint"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dioxus = { version = "0.7", features = ["fullstack"] }
+
+# Server-only deps (not compiled for wasm).
+tokio = { version = "1", features = ["full"], optional = true }
+tempfile = { version = "3", optional = true }
+
+[features]
+default = ["web"]
+web = ["dioxus/web"]
+server = ["dioxus/server", "dep:tokio", "dep:tempfile"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

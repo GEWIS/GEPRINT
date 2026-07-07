@@ -1,0 +1,5 @@
+[application]
+name = "gewisprint"
+
+[web.app]
+title = "GEWISprint"
