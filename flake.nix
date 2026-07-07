@@ -8,11 +8,10 @@
   };
 
   # Consumers of this flake automatically pull prebuilt artifacts from the
-  # GEWIS Cachix cache. Replace the public key below with the one Cachix
-  # prints when you create the `gewis` cache (`cachix.org` → cache → "Push").
+  # GEWIS Cachix cache.
   nixConfig = {
     extra-substituters = [ "https://gewis.cachix.org" ];
-    extra-trusted-public-keys = [ "gewis.cachix.org-1:REPLACE_WITH_PUBLIC_KEY" ];
+    extra-trusted-public-keys = [ "gewis.cachix.org-1:bOcor+MaaLuUJN0Yj/IHCXsOQWm/RxSokm6BHGcbF5k=" ];
   };
 
   outputs = { self, nixpkgs, rust-overlay, flake-utils }:
