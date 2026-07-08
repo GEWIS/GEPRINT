@@ -13,10 +13,13 @@ fn App() -> Element {
     let mut status = use_signal(String::new);
 
     rsx! {
-        document::Title { "GEWISprint" }
+        document::Title { "GEPRINT" }
         style { {CSS} }
         main {
-            h1 { "GEWISprint" }
+            h1 { "GEPRINT" }
+            p { class: "acronym",
+                b { "G" } "EWIS " b { "E" } "rvaart " b { "P" } "apier " b { "R" } "ijk " b { "I" } "n " b { "N" } "ieuwe " b { "T" } "eksten"
+            }
             p { class: "sub", "Upload a file and send it to a printer." }
 
             section {
@@ -151,7 +154,7 @@ mod server {
         .await
         .map_err(|e| e.to_string())??;
 
-        let title = if filename.is_empty() { "gewisprint" } else { &filename };
+        let title = if filename.is_empty() { "geprint" } else { &filename };
         let out = Command::new("lp")
             .arg("-d")
             .arg(&printer)
@@ -180,7 +183,9 @@ const CSS: &str = r#"
 body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: #0f1115; color: #e6e6e6; }
 main { max-width: 34rem; margin: 3rem auto; padding: 0 1.25rem; }
 h1 { margin: 0 0 .25rem; font-size: 2rem; letter-spacing: -.02em; }
-.sub { color: #9aa0aa; margin: .25rem 0 1.5rem; }
+.acronym { color: #c7ccd6; margin: .1rem 0 .1rem; font-size: .95rem; }
+.acronym b { color: #d8232a; font-weight: 700; }
+.sub { color: #9aa0aa; margin: .1rem 0 1.5rem; }
 section { margin: 1.25rem 0; display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
 label { min-width: 4rem; font-weight: 600; }
 select, input[type=file] { flex: 1; min-width: 12rem; padding: .5rem .6rem; border-radius: .5rem;

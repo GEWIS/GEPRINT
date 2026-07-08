@@ -2,18 +2,18 @@ self:
 { config, lib, pkgs, ... }:
 
 let
-  cfg = config.services.gewisprint;
+  cfg = config.services.geprint;
   pkg = self.packages.${pkgs.system}.default;
 in
 {
-  options.services.gewisprint = {
-    enable = lib.mkEnableOption "GEWISprint CUPS print server";
+  options.services.geprint = {
+    enable = lib.mkEnableOption "GEPRINT CUPS print server";
 
     package = lib.mkOption {
       type = lib.types.package;
       default = pkg;
-      defaultText = lib.literalExpression "gewisprint flake package";
-      description = "The gewisprint package to run.";
+      defaultText = lib.literalExpression "geprint flake package";
+      description = "The geprint package to run.";
     };
 
     address = lib.mkOption {
@@ -45,8 +45,8 @@ in
   config = lib.mkIf cfg.enable {
     services.printing.enable = lib.mkIf cfg.enableCups true;
 
-    systemd.services.gewisprint = {
-      description = "GEWISprint CUPS print server";
+    systemd.services.geprint = {
+      description = "GEPRINT CUPS print server";
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ] ++ lib.optional cfg.enableCups "cups.service";
       wants = lib.optional cfg.enableCups "cups.service";
@@ -57,12 +57,12 @@ in
       environment = {
         IP = cfg.address;
         PORT = toString cfg.port;
-        DIOXUS_PUBLIC_PATH = "${cfg.package}/share/gewisprint/public";
+        DIOXUS_PUBLIC_PATH = "${cfg.package}/share/geprint/public";
       };
 
       serviceConfig = {
         ExecStart = lib.getExe cfg.package;
-        WorkingDirectory = "${cfg.package}/share/gewisprint";
+        WorkingDirectory = "${cfg.package}/share/geprint";
         Restart = "on-failure";
 
         # Hardening. Printing goes through the CUPS unix socket, so no raw

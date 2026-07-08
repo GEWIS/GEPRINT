@@ -1,5 +1,5 @@
 [application]
-name = "gewisprint"
+name = "geprint"
 
 [web.app]
-title = "GEWISprint"
+title = "GEPRINT"

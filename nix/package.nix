@@ -11,7 +11,7 @@
 }:
 
 stdenv.mkDerivation (finalAttrs: {
-  pname = "gewisprint";
+  pname = "geprint";
   version = "0.1.0";
 
   src = lib.cleanSource ../.;
@@ -47,16 +47,16 @@ stdenv.mkDerivation (finalAttrs: {
 
   installPhase = ''
     runHook preInstall
-    mkdir -p $out/bin $out/share/gewisprint
+    mkdir -p $out/bin $out/share/geprint
     # dx flattens the server executable and the public/ dir into --out-dir.
-    cp dist/server $out/bin/gewisprint
-    cp -r dist/public $out/share/gewisprint/public
+    cp dist/server $out/bin/geprint
+    cp -r dist/public $out/share/geprint/public
     runHook postInstall
   '';
 
   meta = {
     description = "Dioxus fullstack CUPS print server";
-    mainProgram = "gewisprint";
+    mainProgram = "geprint";
     platforms = lib.platforms.linux;
   };
 })

@@ -1,5 +1,5 @@
 {
-  description = "gewisprint — Dioxus fullstack CUPS print server";
+  description = "geprint — Dioxus fullstack CUPS print server";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
