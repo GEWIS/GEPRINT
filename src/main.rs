@@ -205,11 +205,13 @@ label { min-width: 4rem; font-weight: 600; }
   padding: .4rem .5rem; border-radius: .5rem; border: 1px solid #2a2f3a; background: #171a21; }
 .file-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); border: 0; }
-.browse { min-width: 0; flex: 0 0 auto; padding: .4rem .85rem; border-radius: .4rem; cursor: pointer;
+.browse { flex: 1; text-align: center; padding: .4rem .85rem; border-radius: .4rem; cursor: pointer;
   font-weight: 600; color: #fff; background: #2a2f3a; border: 1px solid #3a4150; transition: background .15s; }
 .browse:hover { background: #3a4150; }
+.file-row:has(.fname) .browse { flex: 0 0 auto; text-align: left; }
 .fname { flex: 1; min-width: 0; color: #c7ccd6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.clear { flex: 0 0 auto; padding: .25rem .55rem; border-radius: .4rem; line-height: 1;
+.clear { flex: 0 0 auto; width: 2rem; height: 2rem; display: inline-flex; align-items: center;
+  justify-content: center; padding: 0; border-radius: .4rem; line-height: 1; font-size: 1rem;
   color: #9aa0aa; background: transparent; border: 1px solid #2a2f3a; }
 .clear:hover { color: #fff; background: #d8232a; border-color: #d8232a; }
 select { flex: 1; min-width: 12rem; padding: .5rem .6rem; border-radius: .5rem;
