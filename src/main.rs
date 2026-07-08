@@ -41,19 +41,36 @@ fn App() -> Element {
 
             section {
                 label { "File" }
-                input {
-                    r#type: "file",
-                    onchange: move |e: FormEvent| async move {
-                        if let Some(f) = e.files().into_iter().next() {
-                            if let Ok(bytes) = f.read_bytes().await {
-                                filename.set(f.name());
-                                file_bytes.set(bytes.to_vec());
+                div { class: "file-row",
+                    label { class: "browse", r#for: "file-input", "Choose file" }
+                    input {
+                        id: "file-input",
+                        class: "file-hidden",
+                        r#type: "file",
+                        onchange: move |e: FormEvent| async move {
+                            if let Some(f) = e.files().into_iter().next() {
+                                if let Ok(bytes) = f.read_bytes().await {
+                                    filename.set(f.name());
+                                    file_bytes.set(bytes.to_vec());
+                                }
                             }
+                        },
+                    }
+                    if !filename.read().is_empty() {
+                        span { class: "fname", "{filename}" }
+                        button {
+                            r#type: "button",
+                            class: "clear",
+                            title: "Remove file",
+                            onclick: move |_| {
+                                filename.set(String::new());
+                                file_bytes.set(Vec::new());
+                                // Reset the native input so re-selecting the same file fires onchange.
+                                document::eval("document.getElementById('file-input').value = ''");
+                            },
+                            "✕"
                         }
-                    },
-                }
-                if !filename.read().is_empty() {
-                    p { class: "sub", "Selected: {filename} ({file_bytes.read().len()} bytes)" }
+                    }
                 }
             }
 
@@ -184,7 +201,18 @@ h1[title] { cursor: help; }
 .sub { color: #9aa0aa; margin: .25rem 0 1.5rem; }
 section { margin: 1.25rem 0; display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
 label { min-width: 4rem; font-weight: 600; }
-select, input[type=file] { flex: 1; min-width: 12rem; padding: .5rem .6rem; border-radius: .5rem;
+.file-row { flex: 1; min-width: 12rem; display: flex; align-items: center; gap: .6rem;
+  padding: .4rem .5rem; border-radius: .5rem; border: 1px solid #2a2f3a; background: #171a21; }
+.file-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+.browse { min-width: 0; flex: 0 0 auto; padding: .4rem .85rem; border-radius: .4rem; cursor: pointer;
+  font-weight: 600; color: #fff; background: #2a2f3a; border: 1px solid #3a4150; transition: background .15s; }
+.browse:hover { background: #3a4150; }
+.fname { flex: 1; min-width: 0; color: #c7ccd6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clear { flex: 0 0 auto; padding: .25rem .55rem; border-radius: .4rem; line-height: 1;
+  color: #9aa0aa; background: transparent; border: 1px solid #2a2f3a; }
+.clear:hover { color: #fff; background: #d8232a; border-color: #d8232a; }
+select { flex: 1; min-width: 12rem; padding: .5rem .6rem; border-radius: .5rem;
   border: 1px solid #2a2f3a; background: #171a21; color: #e6e6e6; }
 button { padding: .55rem 1rem; border-radius: .5rem; border: 0; cursor: pointer; font-weight: 600; }
 button:disabled { opacity: .45; cursor: not-allowed; }
