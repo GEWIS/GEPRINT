@@ -338,6 +338,14 @@ mod server {
         // Pipe the bytes straight into `lp` via stdin: no temp file to race on
         // deletion, no filename-extension format sniffing. `lp` with no file
         // argument reads the job from stdin.
+        // Duplex is expressed two ways because drivers disagree: `sides=` is the
+        // IPP name, while many PPD-based drivers only honour `Duplex=`. Sending
+        // both means whichever the queue understands wins; the other is ignored.
+        let duplex = match sides.as_str() {
+            "two-sided-long-edge" => "DuplexNoTumble",
+            "two-sided-short-edge" => "DuplexTumble",
+            _ => "None",
+        };
         let mut child = Command::new("lp")
             .arg("-d")
             .arg(&printer)
@@ -347,6 +355,8 @@ mod server {
             .arg(copies.to_string())
             .arg("-o")
             .arg(format!("sides={sides}"))
+            .arg("-o")
+            .arg(format!("Duplex={duplex}"))
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
