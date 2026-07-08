@@ -12,15 +12,46 @@ fn App() -> Element {
     let mut file_bytes = use_signal(Vec::<u8>::new);
     let mut status = use_signal(String::new);
     let mut copies = use_signal(|| 1u32);
-    let mut two_sided = use_signal(|| false);
+    let mut sides = use_signal(|| "one-sided".to_string());
     let mut preview_url = use_signal(String::new);
     let mut preview_kind = use_signal(String::new); // "image" | "pdf" | ""
+    let mut theme = use_signal(|| "dark".to_string());
+    // Initialise theme once from the saved choice or the OS preference.
+    use_effect(move || {
+        spawn(async move {
+            if let Ok(v) = document::eval(
+                "return localStorage.getItem('gp-theme') || \
+                 (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');",
+            )
+            .await
+            {
+                if let Some(t) = v.as_str() {
+                    if t == "light" || t == "dark" {
+                        theme.set(t.to_string());
+                    }
+                }
+            }
+        });
+    });
 
     rsx! {
         document::Title { "GEPRINT" }
         style { {CSS} }
-        main {
-            h1 { title: "GEWIS Ervaart Papier Rijk In Nieuwe Teksten", "GEPRINT" }
+        main { "data-theme": "{theme}",
+            div { class: "topbar",
+                h1 { title: "GEWIS Ervaart Papier Rijk In Nieuwe Teksten", "GEPRINT" }
+                button {
+                    r#type: "button",
+                    class: "ghost theme-toggle",
+                    title: "Toggle light / dark mode",
+                    onclick: move |_| {
+                        let next = if theme() == "light" { "dark" } else { "light" };
+                        theme.set(next.to_string());
+                        document::eval(&format!("localStorage.setItem('gp-theme','{next}');"));
+                    },
+                    if theme() == "light" { "🌙" } else { "☀" }
+                }
+            }
             p { class: "sub", "Upload a file and send it to a printer." }
 
             section {
@@ -51,6 +82,7 @@ fn App() -> Element {
                         id: "file-input",
                         class: "file-hidden",
                         r#type: "file",
+                        accept: "application/pdf,image/png,image/jpeg,image/gif,image/bmp,image/tiff,image/webp,text/plain,.pdf,.png,.jpg,.jpeg,.gif,.bmp,.tif,.tiff,.webp,.txt",
                         onchange: move |e: FormEvent| async move {
                             if let Some(f) = e.files().into_iter().next() {
                                 if let Ok(bytes) = f.read_bytes().await {
@@ -125,13 +157,17 @@ fn App() -> Element {
                         copies.set(n);
                     },
                 }
-                label { class: "check",
-                    input {
-                        r#type: "checkbox",
-                        checked: two_sided(),
-                        onchange: move |e| two_sided.set(e.checked()),
-                    }
-                    "Print on both sides"
+            }
+
+            section {
+                label { "Sides" }
+                select {
+                    class: "sides",
+                    value: "{sides}",
+                    onchange: move |e| sides.set(e.value()),
+                    option { value: "one-sided", "Single-sided" }
+                    option { value: "two-sided-long-edge", "Double-sided — flip on long edge" }
+                    option { value: "two-sided-short-edge", "Double-sided — flip on short edge" }
                 }
             }
 
@@ -153,14 +189,14 @@ fn App() -> Element {
                 disabled: selected.read().is_empty() || file_bytes.read().is_empty(),
                 onclick: move |_| async move {
                     status.set("Printing…".into());
-                    let (printer, name, n, duplex, bytes) = (
+                    let (printer, name, n, s, bytes) = (
                         selected.read().clone(),
                         filename.read().clone(),
                         copies(),
-                        two_sided(),
+                        sides.read().clone(),
                         file_bytes.read().clone(),
                     );
-                    let res = print_file(printer, name, n, duplex, bytes).await;
+                    let res = print_file(printer, name, n, s, bytes).await;
                     match res {
                         Ok(job) => status.set(format!("✓ Submitted: {job}")),
                         Err(e) => status.set(format!("✗ {e}")),
@@ -183,16 +219,17 @@ async fn list_printers() -> ServerFnResult<Vec<String>> {
 }
 
 /// Print `bytes` (original name `filename`) on `printer` with the given options.
+/// `sides` is one of `one-sided`, `two-sided-long-edge`, `two-sided-short-edge`.
 /// Returns the CUPS job id.
 #[server]
 async fn print_file(
     printer: String,
     filename: String,
     copies: u32,
-    two_sided: bool,
+    sides: String,
     bytes: Vec<u8>,
 ) -> ServerFnResult<String> {
-    server::print(printer, filename, copies, two_sided, bytes)
+    server::print(printer, filename, copies, sides, bytes)
         .await
         .map_err(ServerFnError::new)
 }
@@ -209,6 +246,51 @@ mod server {
             && name
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+    }
+
+    /// Sniff the file's real type from its leading bytes and reject anything we
+    /// don't want to hand to the printer (executables, archives, office blobs, …).
+    /// This is the security boundary: the browser-sent MIME is untrusted, so we
+    /// decide purely from content. Returns a human label on success.
+    fn allowed_kind(bytes: &[u8]) -> Result<&'static str, String> {
+        let b = bytes;
+        let starts = |sig: &[u8]| b.len() >= sig.len() && &b[..sig.len()] == sig;
+
+        if starts(b"%PDF-") {
+            return Ok("PDF");
+        }
+        if starts(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]) {
+            return Ok("PNG image");
+        }
+        if starts(&[0xFF, 0xD8, 0xFF]) {
+            return Ok("JPEG image");
+        }
+        if starts(b"GIF87a") || starts(b"GIF89a") {
+            return Ok("GIF image");
+        }
+        if starts(b"BM") {
+            return Ok("BMP image");
+        }
+        if starts(&[0x49, 0x49, 0x2A, 0x00]) || starts(&[0x4D, 0x4D, 0x00, 0x2A]) {
+            return Ok("TIFF image");
+        }
+        if b.len() >= 12 && &b[..4] == b"RIFF" && &b[8..12] == b"WEBP" {
+            return Ok("WEBP image");
+        }
+        // Plain text: valid UTF-8 with no control chars other than tab/newline/CR.
+        if std::str::from_utf8(b).is_ok()
+            && !b
+                .iter()
+                .any(|&c| c < 0x09 || (c > 0x0D && c < 0x20) || c == 0x7F)
+        {
+            return Ok("text");
+        }
+        Err("Unsupported file type. Allowed: PDF, images (PNG, JPEG, GIF, BMP, TIFF, WEBP) and plain text.".into())
+    }
+
+    /// Sides values `lp` accepts; keeps an untrusted string out of `-o sides=`.
+    fn valid_sides(s: &str) -> bool {
+        matches!(s, "one-sided" | "two-sided-long-edge" | "two-sided-short-edge")
     }
 
     pub async fn printer_names() -> Result<Vec<String>, String> {
@@ -235,7 +317,7 @@ mod server {
         printer: String,
         filename: String,
         copies: u32,
-        two_sided: bool,
+        sides: String,
         bytes: Vec<u8>,
     ) -> Result<String, String> {
         if !valid_printer(&printer) {
@@ -244,10 +326,14 @@ mod server {
         if bytes.is_empty() {
             return Err("empty file".into());
         }
+        // Content-based allowlist — the security boundary against binaries.
+        allowed_kind(&bytes)?;
+        if !valid_sides(&sides) {
+            return Err("invalid sides option".into());
+        }
         let copies = copies.clamp(1, 999);
 
         let title = if filename.is_empty() { "geprint" } else { &filename };
-        let sides = if two_sided { "two-sided-long-edge" } else { "one-sided" };
 
         // Pipe the bytes straight into `lp` via stdin: no temp file to race on
         // deletion, no filename-extension format sniffing. `lp` with no file
@@ -296,40 +382,52 @@ mod server {
 
 const CSS: &str = r#"
 * { box-sizing: border-box; }
-body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: #0f1115; color: #e6e6e6; }
-main { max-width: 34rem; margin: 3rem auto; padding: 0 1.25rem; }
+main {
+  --bg: #0f1115; --fg: #e6e6e6; --muted: #9aa0aa; --field: #171a21;
+  --border: #2a2f3a; --browse: #2a2f3a; --browse-bd: #3a4150; --browse-fg: #fff;
+  --fname: #c7ccd6; --preview-bg: #0b0d11; --accent: #d8232a;
+  max-width: 34rem; margin: 3rem auto; padding: 0 1.25rem; color: var(--fg);
+}
+main[data-theme="light"] {
+  --bg: #f6f7f9; --fg: #1a1d23; --muted: #5b6270; --field: #fff;
+  --border: #d3d7de; --browse: #e9ebef; --browse-bd: #c7ccd6; --browse-fg: #1a1d23;
+  --fname: #333a45; --preview-bg: #eceef1; --accent: #d8232a;
+}
+body { margin: 0; font: 16px/1.5 system-ui, sans-serif; }
+/* Paint the page background from the active theme. */
+body:has(main[data-theme="light"]) { background: #f6f7f9; }
+body:has(main[data-theme="dark"]) { background: #0f1115; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
 h1 { margin: 0 0 .25rem; font-size: 2rem; letter-spacing: -.02em; }
 h1[title] { cursor: help; }
-.sub { color: #9aa0aa; margin: .25rem 0 1.5rem; }
+.theme-toggle { font-size: 1.1rem; line-height: 1; padding: .4rem .6rem; }
+.sub { color: var(--muted); margin: .25rem 0 1.5rem; }
 section { margin: 1.25rem 0; display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
 label { min-width: 4rem; font-weight: 600; }
 .file-row { flex: 1; min-width: 12rem; display: flex; align-items: center; gap: .6rem;
-  padding: .4rem .5rem; border-radius: .5rem; border: 1px solid #2a2f3a; background: #171a21; }
+  padding: .4rem .5rem; border-radius: .5rem; border: 1px solid var(--border); background: var(--field); }
 .file-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); border: 0; }
 .browse { flex: 1; text-align: center; padding: .4rem .85rem; border-radius: .4rem; cursor: pointer;
-  font-weight: 600; color: #fff; background: #2a2f3a; border: 1px solid #3a4150; transition: background .15s; }
-.browse:hover { background: #3a4150; }
+  font-weight: 600; color: var(--browse-fg); background: var(--browse); border: 1px solid var(--browse-bd); transition: background .15s; }
+.browse:hover { filter: brightness(1.12); }
 .file-row:has(.fname) .browse { flex: 0 0 auto; text-align: left; }
-.fname { flex: 1; min-width: 0; color: #c7ccd6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fname { flex: 1; min-width: 0; color: var(--fname); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .clear { flex: 0 0 auto; width: 2rem; height: 2rem; display: inline-flex; align-items: center;
   justify-content: center; padding: 0; border-radius: .4rem; line-height: 1; font-size: 1rem;
-  color: #9aa0aa; background: transparent; border: 1px solid #2a2f3a; }
-.clear:hover { color: #fff; background: #d8232a; border-color: #d8232a; }
-select { flex: 1; min-width: 12rem; padding: .5rem .6rem; border-radius: .5rem;
-  border: 1px solid #2a2f3a; background: #171a21; color: #e6e6e6; }
+  color: var(--muted); background: transparent; border: 1px solid var(--border); }
+.clear:hover { color: #fff; background: var(--accent); border-color: var(--accent); }
+select, .num { padding: .5rem .6rem; border-radius: .5rem; border: 1px solid var(--border);
+  background: var(--field); color: var(--fg); }
+select { flex: 1; min-width: 12rem; }
+.num { width: 5rem; }
 button { padding: .55rem 1rem; border-radius: .5rem; border: 0; cursor: pointer; font-weight: 600; }
 button:disabled { opacity: .45; cursor: not-allowed; }
-.primary { background: #d8232a; color: #fff; width: 100%; margin-top: .5rem; padding: .7rem; font-size: 1.05rem; }
-.ghost { background: transparent; color: #9aa0aa; border: 1px solid #2a2f3a; }
-.status { margin-top: 1rem; padding: .7rem .9rem; border-radius: .5rem; background: #171a21; border: 1px solid #2a2f3a; }
-.num { width: 5rem; padding: .5rem .6rem; border-radius: .5rem; border: 1px solid #2a2f3a;
-  background: #171a21; color: #e6e6e6; }
-.check { min-width: 0; font-weight: 400; display: inline-flex; align-items: center; gap: .4rem;
-  color: #c7ccd6; cursor: pointer; }
-.check input { width: 1.05rem; height: 1.05rem; accent-color: #d8232a; cursor: pointer; }
+.primary { background: var(--accent); color: #fff; width: 100%; margin-top: .5rem; padding: .7rem; font-size: 1.05rem; }
+.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.status { margin-top: 1rem; padding: .7rem .9rem; border-radius: .5rem; background: var(--field); border: 1px solid var(--border); }
 .preview-sec { flex-direction: column; align-items: stretch; }
-.preview { border: 1px solid #2a2f3a; border-radius: .5rem; overflow: hidden; background: #0b0d11; }
+.preview { border: 1px solid var(--border); border-radius: .5rem; overflow: hidden; background: var(--preview-bg); }
 .preview img { display: block; max-width: 100%; max-height: 26rem; margin: 0 auto; }
 .preview .pdf { display: block; width: 100%; height: 26rem; border: 0; }
 .warn { color: #e6b800; } .err, .status:has(+ *) { color: #ff6b6b; }
